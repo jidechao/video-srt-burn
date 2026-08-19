@@ -1,0 +1,21 @@
+# Secrets & personal word lists
+.env
+glossary.json
+hotwords.json
+vocabulary-cache.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Pipeline working directories
+*.subtitle-work/
+
+# Outputs (videos are large; keep the repo source-only)
+*_subtitled.mp4
+*_subtitled.ass
+*_subtitled.srt
+*.mp4
+*.mov
+*.wav
