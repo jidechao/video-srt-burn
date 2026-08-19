@@ -72,12 +72,24 @@ API Key **只认 `.env`**（或真实环境变量 `DASHSCOPE_API_KEY`，环境�
 
 2. 命令行：`--hotwords path.json` / `--glossary path.json`
 
-词表格式（两个文件相同）：
+两种文件格式不同：
+
+**hotwords.json** —— 百炼定制热词格式（`text` 必填、`weight` 为 1–5 整数必填、`lang` 可选），上传后在**识别阶段**生效，专治专有名词（文件内容变化时自动更新远端词表，ID 缓存在 `~/.cache/videotrans/`）：
 
 ```json
 [
+  {"text": "周谷堆", "weight": 4, "lang": "zh"},
+  {"text": "Claude Code", "weight": 4, "lang": "en"}
+]
+```
+
+**glossary.json** —— 错词到正确词的映射，在**转录后和烧录时**做"容忍空格、忽略大小写"的替换（`GPT55` 也能命中 `GPT 55`）：
+
+```json
+[
+  {"wrong": "周古堆", "correct": "周谷堆"},
   {"wrong": "克劳德", "correct": "Claude"},
-  {"wrong": "百链", "correct": "百炼"}
+  {"wrong": "gpt55", "correct": "GPT-5"}
 ]
 ```
 
