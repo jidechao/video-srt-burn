@@ -102,7 +102,21 @@ python -m videotrans 视频文件.mp4
 | `--port 8765` | 预览编辑器端口 |
 | `--text-model` / `--vision-model` / `--split-model` | 覆盖各阶段 Qwen 模型 |
 
-中途产物在工作目录 `<视频名>.subtitle-work/`：`transcript.json`（转录）→ `reviewed-transcript.json`（校对后）→ `subtitle-transcript.json`（断句+排版后，编辑器编辑的就是它）。
+中途产物都在工作目录 `<视频名>.subtitle-work/`（**删除该目录即可全量重跑**；`--resume` 会跳过产物已存在的阶段）：
+
+| 文件 | 阶段 | 用途 |
+|---|---|---|
+| `bailian_asr.json` | 转录 | 原始 ASR 结果留存 |
+| `transcript.json` | 转录 | 断句后的字幕段（含词级时间戳） |
+| `reviewed-transcript.json` | 校对 | 语义 + 视觉校对后的字幕 |
+| `subtitle-review.json` | 校对 | 校对报告（applied / unresolved 及抽帧路径） |
+| `review-frames/` | 校对 | 疑点时间点抽取的帧图片 |
+| `subtitle-transcript.json` | 准备 | 显示版字幕，**编辑器编辑的就是它**；烧录默认读取它 |
+| `subtitle-transcript.json.orig.json` | 预览 | 保存前的自动备份（错题本学习的比对基准） |
+| `subtitle-chapters.json` | 准备 | 章节定义（>3 分钟视频） |
+| `cache/chapters-response.json` | 准备 | 章节 LLM 响应缓存（`--resume` 复用，签名匹配才生效） |
+| `manual-edit-review.json` | 预览 | 人工修改的错题本学习判定结果 |
+| `pipeline-report.json` | 全程 | 各阶段耗时与状态 |
 
 流水线最后自动打开预览编辑器 `http://localhost:8765`：双击修改文字、勾选删除、查找替换，确认后点「保存并关闭」，然后 Ctrl-C 退出。保存时会自动判断人工修改是否值得进错题本（结果在 `manual-edit-review.json`）。
 
@@ -123,6 +137,17 @@ python -m videotrans.burn 视频文件.mp4
 字幕字体默认按平台选择真实存在的字体：Windows 用微软雅黑、macOS 用 PingFang SC、Linux 用 Noto Sans CJK SC，避免 libass 静默替换成不可控的兜底字体。
 
 **低分辨率视频的清晰度技巧**：`--output-height` 传大于源尺寸的值会放大渲染（lanczos），例如 270p 源加 `--output-height 1080`，字幕会按 1080p 分辨率渲染，清晰度接近预览编辑器；画面本身仍受源分辨率限制。缩小路径行为与历史版本完全一致。
+
+## 常见问题
+
+**编辑器里的字幕和烧录后的观感为什么不同？**
+编辑器字幕是浏览器矢量文本，按显示器分辨率渲染，永远锐利；烧录字幕则画进视频像素里，受源分辨率和视频编码影响。低分辨率源加 `--output-height 1080` 放大渲染即可大幅接近编辑器效果（画面本身仍受源分辨率限制）。
+
+**只想改几条字幕再重新烧录，要重跑整个流水线吗？**
+不用。直接编辑 `<视频名>.subtitle-work/subtitle-transcript.json` 里对应条目的 `text`（或编辑已生成的 `.ass` 微调字号/位置），然后重跑 `python -m videotrans.burn 视频文件.mp4` 即可，前面的阶段不会重跑、不消耗 API。
+
+**真实运行消耗百炼额度吗？**
+消耗。一次完整流水线 = 1 次 ASR 转录 + 数次 Qwen 调用（校对按 80 条/块分批、断句、章节）。参考耗时（3.5 分钟 480×270 视频）：转录 28s、校对 15s、准备 2s、烧录 11s（270p）/ 约 1 分钟（放大到 1080p）。
 
 ## 测试
 
@@ -149,4 +174,4 @@ set PYTHONIOENCODING=utf-8
 
 ## 致谢
 
-本项目的流水线逻辑移植自 [oil-subtitle](../oil-subtitle) skill，与其核心算法保持一致。
+本项目的流水线逻辑移植自内部的 oil-subtitle skill，核心算法（热词远程词表缓存、术语表双端一致替换、两阶段校对、断句打分与硬上限、章节规划、ASS 排版）与其保持一致。
