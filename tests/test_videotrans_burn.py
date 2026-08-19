@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -320,6 +321,60 @@ class LayoutHelperTests(BurnTestCase):
         landscape = burn._resolve_effective_max_chars(0, 1920, 1080, False)
         portrait = burn._resolve_effective_max_chars(0, 720, 1280, False)
         self.assertGreater(landscape, portrait)
+
+
+class PlatformFontTests(BurnTestCase):
+    def test_platform_font_selection(self):
+        # libass substitutes unknown fonts unpredictably; the default must be
+        # a font that actually exists on the running platform.
+        with mock.patch.object(burn.sys, "platform", "win32"):
+            self.assertEqual(burn._subtitle_font(), "Microsoft YaHei")
+        with mock.patch.object(burn.sys, "platform", "darwin"):
+            self.assertEqual(burn._subtitle_font(), "PingFang SC")
+        self.assertEqual(burn._subtitle_font("SimHei"), "SimHei")
+
+    def test_generated_ass_uses_resolved_font(self):
+        tmp = self.tmp()
+        path = tmp / "out.ass"
+        burn.generate_ass(
+            [{"start": 0.0, "end": 1.0, "text": "字幕"}],
+            path,
+            video_width=480,
+            video_height=270,
+            font="Microsoft YaHei",
+        )
+        content = path.read_text(encoding="utf-8")
+        self.assertIn("Style: CaptionText,Microsoft YaHei,", content)
+        self.assertIn("Style: ProgressLabel,Microsoft YaHei,", content)
+        self.assertNotIn("PingFang SC", content)
+
+
+class ScaleFilterTests(BurnTestCase):
+    def test_flags_appended_only_when_given(self):
+        # No flags = byte-identical historical downscale filter string.
+        self.assertEqual(burn._scale_filter((1280, 720)), "scale=1280:720")
+        self.assertEqual(
+            burn._scale_filter((1920, 1080), "lanczos"),
+            "scale=1920:1080:flags=lanczos",
+        )
+
+    def test_progress_graph_accepts_scale_flags(self):
+        graph, _ = burn.build_progress_filter_graph(
+            "ass='x.ass'",
+            progress_overlay_height=54,
+            scale_to=(1920, 1080),
+            scale_flags="lanczos",
+        )
+        self.assertIn("scale=1920:1080:flags=lanczos", graph)
+
+    def test_progress_graph_default_scale_unchanged(self):
+        graph, _ = burn.build_progress_filter_graph(
+            "ass='x.ass'",
+            progress_overlay_height=54,
+            scale_to=(1280, 720),
+        )
+        self.assertIn("scale=1280:720", graph)
+        self.assertNotIn("flags=", graph)
 
 
 if __name__ == "__main__":

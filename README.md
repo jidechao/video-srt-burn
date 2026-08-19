@@ -118,7 +118,11 @@ python -m videotrans.burn 视频文件.mp4
 - `<视频名>_subtitled.ass` — ASS 字幕
 - `<视频名>_subtitled.srt` — SRT 字幕
 
-常用选项：`--output` 指定输出、`--srt-input` 直烧已审阅的 SRT（文本/换行/时间码原样保留）、`--draft-only` 只出 SRT 草稿、`--square-output` / `--output-height` 方形裁剪/缩放、`--no-progress` 不渲染章节进度条、`--no-beauty` 关闭摄像头区域轻度美颜（仅 macOS 支持检测，其他平台自动跳过）。
+常用选项：`--output` 指定输出、`--srt-input` 直烧已审阅的 SRT（文本/换行/时间码原样保留）、`--draft-only` 只出 SRT 草稿、`--square-output` / `--output-height` 方形裁剪/缩放、`--no-progress` 不渲染章节进度条、`--font` 自定义字幕字体、`--no-beauty` 关闭摄像头区域轻度美颜（仅 macOS 支持检测，其他平台自动跳过）。
+
+字幕字体默认按平台选择真实存在的字体：Windows 用微软雅黑、macOS 用 PingFang SC、Linux 用 Noto Sans CJK SC，避免 libass 静默替换成不可控的兜底字体。
+
+**低分辨率视频的清晰度技巧**：`--output-height` 传大于源尺寸的值会放大渲染（lanczos），例如 270p 源加 `--output-height 1080`，字幕会按 1080p 分辨率渲染，清晰度接近预览编辑器；画面本身仍受源分辨率限制。缩小路径行为与历史版本完全一致。
 
 ## 测试
 

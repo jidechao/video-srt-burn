@@ -66,6 +66,13 @@ def resolve_ffprobe() -> str:
     return ffprobe
 
 
+def _scale_filter(scale_to: tuple[int, int], flags: str = "") -> str:
+    """Build the ffmpeg scale filter. Flags are appended only when given, so
+    downscale output (no flags) stays identical to the historical behavior."""
+    suffix = f":flags={flags}" if flags else ""
+    return f"scale={scale_to[0]}:{scale_to[1]}{suffix}"
+
+
 def set_display_replacements(entries: list[dict]):
     """Configure case-insensitive text replacements applied to final captions.
 
@@ -574,6 +581,19 @@ def final_display_text(text: str) -> str:
     return _apply_display_replacements(add_cjk_spacing(_strip_display_punctuation(text)))
 
 
+def _subtitle_font(override: str | None = None) -> str:
+    """Resolve the caption font: an explicit override, else a CJK font that
+    actually exists on the running platform. Hard-coding PingFang SC made
+    libass substitute an unpredictable fallback font on Windows."""
+    if override:
+        return override
+    if sys.platform == "darwin":
+        return "PingFang SC"
+    if sys.platform == "win32":
+        return "Microsoft YaHei"
+    return "Noto Sans CJK SC"
+
+
 def _subtitle_style_metrics(video_width: int, video_height: int) -> tuple[int, int]:
     # Size proportional to video height (~6% landscape / 4.2% portrait). The
     # small floor only guards degenerate sizes: a high floor (like the
@@ -740,10 +760,11 @@ def _progress_events(
 def generate_ass(lines: list[dict], output_path: Path, video_width: int = 1920,
                  video_height: int = 1080, max_chars: int = 0,
                  preserve_text: bool = False, chapters: list[dict] | None = None,
-                 duration: float = 0.0):
+                 duration: float = 0.0, font: str | None = None):
     """Generate Chinese ASS subtitles with the original single-language style."""
 
     font_size, margin_v = _subtitle_style_metrics(video_width, video_height)
+    font_name = _subtitle_font(font)
     chapters = chapters or []
     duration = duration or max((float(line["end"]) for line in lines), default=0.0)
     progress_events, progress_height, progress_font = _progress_events(
@@ -766,9 +787,9 @@ def generate_ass(lines: list[dict], output_path: Path, video_width: int = 1920,
 
         [V4+ Styles]
         Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-        Style: CaptionText,PingFang SC,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,20,20,{caption_margin_v},1
+        Style: CaptionText,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,20,20,{caption_margin_v},1
         Style: CaptionBox,Arial,10,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
-        Style: ProgressLabel,PingFang SC,{progress_font},&H10FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+        Style: ProgressLabel,{font_name},{progress_font},&H10FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
         [Events]
         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -1054,6 +1075,7 @@ def build_beauty_filter_graph(
     brighten_strength: float = _DEFAULT_BRIGHTEN_STRENGTH_PERCENT / 100,
     filter_prefix: list[str] | None = None,
     scale_to: tuple[int, int] | None = None,
+    scale_flags: str = "",
     progress_overlay_height: int = 0,
 ) -> tuple[str, str]:
     """Build one FFmpeg graph for light camera beauty plus subtitles.
@@ -1121,7 +1143,7 @@ def build_beauty_filter_graph(
 
     final_filters = list(filter_prefix or [])
     if scale_to:
-        final_filters.append(f"scale={scale_to[0]}:{scale_to[1]}")
+        final_filters.append(_scale_filter(scale_to, scale_flags))
     if progress_overlay_height:
         graph_parts.append(
             f"[beautified]{','.join(final_filters) if final_filters else 'null'}"
@@ -1168,12 +1190,13 @@ def build_progress_filter_graph(
     *,
     filter_prefix: list[str] | None = None,
     scale_to: tuple[int, int] | None = None,
+    scale_flags: str = "",
 ) -> tuple[str, str]:
     """Build the non-beauty graph for a smooth progress gradient and ASS."""
     graph_parts = []
     initial_filters = list(filter_prefix or [])
     if scale_to:
-        initial_filters.append(f"scale={scale_to[0]}:{scale_to[1]}")
+        initial_filters.append(_scale_filter(scale_to, scale_flags))
     graph_parts.append(
         f"[0:v]{','.join(initial_filters) if initial_filters else 'null'}[prepared]"
     )
@@ -1188,6 +1211,7 @@ def build_progress_filter_graph(
 
 def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path,
                    scale_to: tuple[int, int] | None = None,
+                   scale_flags: str = "",
                    filter_prefix: list[str] | None = None,
                    total_duration_s: float = 0,
                    encoder: str = "x264",
@@ -1211,8 +1235,7 @@ def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path,
     ass_filter = f"ass='{ass_str}'"
     vf_parts = list(filter_prefix or [])
     if scale_to:
-        w, h = scale_to
-        vf_parts.append(f"scale={w}:{h}")
+        vf_parts.append(_scale_filter(scale_to, scale_flags))
     vf_parts.append(ass_filter)
     vf = ",".join(vf_parts)
 
@@ -1228,6 +1251,7 @@ def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path,
             camera_region,
             filter_prefix=filter_prefix,
             scale_to=scale_to,
+            scale_flags=scale_flags,
             progress_overlay_height=progress_overlay_height,
         )
         x, y, width, height = camera_region
@@ -1242,6 +1266,7 @@ def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path,
             progress_overlay_height,
             filter_prefix=filter_prefix,
             scale_to=scale_to,
+            scale_flags=scale_flags,
         )
         log("Continuous translucent progress gradient enabled")
         log("Beauty smoothing disabled")
@@ -1250,7 +1275,8 @@ def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path,
         log("Beauty smoothing disabled")
 
     if scale_to:
-        log(f"Scaling to {scale_to[0]}x{scale_to[1]}")
+        log(f"Scaling to {scale_to[0]}x{scale_to[1]}"
+            + (f" ({scale_flags})" if scale_flags else ""))
     if encoder == "videotoolbox":
         if scale_to or filter_prefix or beauty_enabled or progress_enabled:
             video_codec = ["-c:v", "h264_videotoolbox", "-b:v", "8M"]
@@ -1365,6 +1391,7 @@ def run_burn(
     output_height: int = 0,
     encoder: str = "x264",
     no_beauty: bool = False,
+    font: str | None = None,
     work_dir: Path | None = None,
 ) -> Path:
     """Full burn flow; returns the output video path."""
@@ -1401,6 +1428,7 @@ def run_burn(
     # For portrait video (height > width), scale by width to avoid tiny output.
     is_portrait = video_h > video_w
     scale_to = None
+    upscale = False
     filter_prefix: list[str] = []
     if square_output:
         crop_side = min(video_w, video_h)
@@ -1412,29 +1440,40 @@ def run_burn(
         target_side = target_side if target_side % 2 == 0 else target_side + 1
         if target_side != crop_side:
             scale_to = (target_side, target_side)
+            upscale = target_side > crop_side
         ass_w = ass_h = target_side
         log(f"Square output enabled - cropping to {crop_side}x{crop_side}"
             + (f", scaling to {target_side}x{target_side}" if scale_to else ""))
     elif output_height and output_height > 0:
+        # Scale whenever a size is requested and differs from the source —
+        # including upscale, which renders subtitles at the higher output
+        # resolution (sharp text on low-res sources). Historically only
+        # downscale took effect; passing a larger value was a silent no-op.
         if is_portrait:
             target_w = output_height
-            if target_w < video_w:
-                out_w = target_w if target_w % 2 == 0 else target_w + 1
-                out_h = round(video_h * out_w / video_w)
-                out_h = out_h if out_h % 2 == 0 else out_h + 1
+            out_w = target_w if target_w % 2 == 0 else target_w + 1
+            out_h = round(video_h * out_w / video_w)
+            out_h = out_h if out_h % 2 == 0 else out_h + 1
+            if (out_w, out_h) != (video_w, video_h):
                 scale_to = (out_w, out_h)
-                log(f"Portrait video detected - scaling by width to {out_w}x{out_h}")
+                upscale = out_w > video_w
+                log(f"Portrait video detected - "
+                    f"{'up' if upscale else ''}scaling by width to {out_w}x{out_h}")
         else:
-            if output_height < video_h:
+            if output_height != video_h:
                 out_h = output_height
                 out_w = round(video_w * out_h / video_h)
                 out_w = out_w if out_w % 2 == 0 else out_w + 1
                 scale_to = (out_w, out_h)
+                upscale = out_h > video_h
         ass_w = scale_to[0] if scale_to else video_w
         ass_h = scale_to[1] if scale_to else video_h
     else:
         ass_w = video_w
         ass_h = video_h
+    # Lanczos only for upscaling; the downscale path keeps the default
+    # (bicubic) scaler so existing outputs stay byte-identical.
+    scale_flags = "lanczos" if upscale else ""
 
     if srt_input:
         lines = read_srt_lines(srt_input)
@@ -1489,6 +1528,7 @@ def run_burn(
         preserve_text=bool(srt_input),
         chapters=chapters_list,
         duration=video_duration,
+        font=font,
     )
 
     if ass_only:
@@ -1503,6 +1543,7 @@ def run_burn(
             log("No stable camera face found; continuing without beauty")
 
     burn_subtitles(video, ass_path, output_path, scale_to=scale_to,
+                   scale_flags=scale_flags,
                    filter_prefix=filter_prefix,
                    total_duration_s=video_duration,
                    encoder=encoder,
@@ -1550,7 +1591,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--square-output", action="store_true",
                         help="Crop to a centered 1:1 square before rendering subtitles.")
     parser.add_argument("--output-height", type=int, default=0,
-                        help="Scale output height (portrait: width). 0 = keep source size.")
+                        help="Scale output height (portrait: width); a value above the "
+                             "source size upscales and renders subtitles at the higher "
+                             "resolution. 0 = keep source size.")
+    parser.add_argument("--font", default=None,
+                        help="Caption font override (default: platform font - "
+                             "Microsoft YaHei on Windows, PingFang SC on macOS, "
+                             "Noto Sans CJK SC elsewhere).")
     parser.add_argument("--encoder", choices=["x264", "videotoolbox"], default="x264",
                         help="Video encoder (default x264; videotoolbox is macOS-only).")
     parser.add_argument("--no-beauty", action="store_true",
@@ -1574,6 +1621,7 @@ def main(argv: list[str] | None = None) -> int:
             output_height=args.output_height,
             encoder=args.encoder,
             no_beauty=args.no_beauty,
+            font=args.font,
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
