@@ -19,3 +19,5 @@ __pycache__/
 *.mp4
 *.mov
 *.wav
+*.ass
+*.srt
