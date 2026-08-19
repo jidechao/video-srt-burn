@@ -11,7 +11,7 @@
      → 烧录：字幕/章节进度条/成片 MP4 + ASS + SRT
 ```
 
-核心包名 `videotrans`，由 [oil-subtitle](../oil-subtitle) skill 独立重实现而来：不依赖 Agent 编排，四个阶段顺序执行、可断点续跑、行为完全确定。
+核心包名 `videotrans`，由内部 oil-subtitle skill 独立重实现而来：不依赖 Agent 编排，四个阶段顺序执行、可断点续跑、行为完全确定。
 
 ## 功能特性
 
@@ -108,11 +108,12 @@ python -m videotrans 视频文件.mp4
 | 选项 | 说明 |
 |---|---|
 | `--resume` | 跳过已有产物的前序阶段（断点续跑） |
+| `--work-dir <dir>` | 自定义工作目录（默认 `<视频名>.subtitle-work`） |
 | `--language zh` | ASR 语言（默认 zh） |
 | `--no-hotwords` / `--no-glossary` | 本次禁用热词/术语表 |
 | `--progress` / `--no-progress` | 强制开/关章节进度条（默认：>3 分钟开启） |
 | `--port 8765` | 预览编辑器端口 |
-| `--text-model` / `--vision-model` / `--split-model` | 覆盖各阶段 Qwen 模型 |
+| `--text-model` / `--vision-model` / `--split-model` / `--prepare-model` | 覆盖各阶段 Qwen 模型 |
 
 中途产物都在工作目录 `<视频名>.subtitle-work/`（**删除该目录即可全量重跑**；`--resume` 会跳过产物已存在的阶段）：
 
@@ -163,7 +164,7 @@ python -m videotrans.burn 视频文件.mp4
 
 ## 测试
 
-93 个离线单元测试（不触网、不消耗百炼额度）：
+离线单元测试全量运行（不触网、不消耗百炼额度）：
 
 ```bash
 # Windows（GBK 控制台需指定 UTF-8）
@@ -187,3 +188,7 @@ set PYTHONIOENCODING=utf-8
 ## 致谢
 
 本项目的流水线逻辑移植自内部的 oil-subtitle skill，核心算法（热词远程词表缓存、术语表双端一致替换、两阶段校对、断句打分与硬上限、章节规划、ASS 排版）与其保持一致。
+
+## 许可证
+
+[MIT](LICENSE)
