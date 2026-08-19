@@ -179,6 +179,22 @@ class ChaptersTests(BurnTestCase):
             )
 
 
+class ProgressLabelMetricsTests(BurnTestCase):
+    def test_label_font_scales_with_resolution(self):
+        # Regression: labels keyed to the (floored) bar height rendered at
+        # 22px on 1080p — ~2% of frame height, a third of caption size.
+        _, small = burn._progress_overlay_metrics(270)
+        _, hd = burn._progress_overlay_metrics(1080)
+        self.assertEqual(small, 18)  # floor keeps small videos unchanged
+        self.assertGreaterEqual(hd, 30)  # roughly half the 65px caption font
+        self.assertLessEqual(hd, 36)
+
+    def test_label_fits_inside_bar(self):
+        for height in (270, 720, 1080, 2160):
+            bar, font = burn._progress_overlay_metrics(height)
+            self.assertLessEqual(font, bar * 0.6, f"font {font} too tall for bar {bar} at {height}p")
+
+
 class AssGenerationTests(BurnTestCase):
     def test_generate_ass_writes_header_and_events(self):
         tmp = self.tmp()

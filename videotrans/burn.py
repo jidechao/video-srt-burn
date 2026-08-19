@@ -712,7 +712,13 @@ def _progress_overlay_metrics(content_height: int) -> tuple[int, int]:
     progress_height = max(54, int(round(content_height * 0.075)))
     if progress_height % 2:
         progress_height += 1
-    progress_font = max(18, int(progress_height * 0.28))
+    # Key the label size to the video height, not the bar height: the bar's
+    # 54px floor inflates its share on small videos, so keying off it left
+    # large videos with labels at ~2% of frame height (22px at 1080p) while
+    # 270p clips rendered them at 3x that share. ~3.1% of the frame height
+    # keeps labels near half the caption size at every resolution, and the
+    # 18px floor leaves small-video output unchanged.
+    progress_font = max(18, int(round(content_height * 0.031)))
     return progress_height, progress_font
 
 
