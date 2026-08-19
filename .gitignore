@@ -1,7 +1,5 @@
-# Secrets & personal word lists
+# Secrets & local caches
 .env
-glossary.json
-hotwords.json
 vocabulary-cache.json
 
 # Python
@@ -21,3 +19,5 @@ __pycache__/
 *.wav
 *.ass
 *.srt
+# Sample video kept in-repo for reproducing the E2E run
+!20mb.mp4
